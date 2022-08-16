@@ -103,6 +103,9 @@ Literal toLit(uchar val) {
 Instruction finishInstruction(const UnfinishedInstruction &s,
                               const MappedData &data) {
   auto reg = [&](const std::string &s) {
+    if(s.empty()){
+        return tri::Register::invalid;
+    }
     auto reg = tri::register_table.find(s);
     if (reg != tri::register_table.end()) {
       return reg->second;

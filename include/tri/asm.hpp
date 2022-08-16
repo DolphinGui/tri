@@ -6,6 +6,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <stdexcept>
 
 namespace tri {
 using uchar = unsigned char;
@@ -20,6 +21,13 @@ enum struct InstructionType : uchar {
 std::unordered_map<std::string_view, InstructionType> const instruction_table =
     {
 #define X(a) {#a, InstructionType::a},
+#include "tri/detail/InstructionMacros"
+#undef X
+};
+
+std::unordered_map<InstructionType,std::string_view > const instruction_names =
+    {
+#define X(a) {InstructionType::a, #a},
 #include "tri/detail/InstructionMacros"
 #undef X
 };
@@ -82,17 +90,29 @@ class Interpreter final {
   std::vector<std::vector<Word>> heap;
   std::vector<Instruction> text;
   std::array<Word, 16> registers{};
+  bool debug = false;
 
   auto &ip() { return registers[0]; }
   auto &bp() { return registers[1]; }
   auto &sp() { return registers[2]; }
   auto &rp() { return registers[3]; }
-  auto &reg(Register r) { return registers[static_cast<uchar>(r)]; }
+  auto &reg(Register r) {
+    if (r != Register::invalid)
+      return registers[static_cast<uchar>(r)];
+    else
+      throw std::logic_error("invalid register accessed");
+  }
+  auto &reg(Operand o) {
+    if (o.reg.type != Type::reg)
+      throw std::runtime_error("wrong operand access type");
+    return reg(o.reg.operand);
+  }
 
 public:
-  Interpreter(Executable);
+  Interpreter(Executable&&);
   void execute();
   size_t mem_consumption() const;
+  void enable_debug() { debug = true; }
 };
 } // namespace tri
 #undef TRI_ENUM_TABLE

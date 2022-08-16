@@ -1,5 +1,6 @@
 #include "tri/asm.hpp"
 #include <iostream>
+#include <utility>
 
 int main() {
   auto data = ".ascii str 'hello world'\n"
@@ -13,5 +14,8 @@ int main() {
               "subi r0 c1 r0\n"
               "jn r0 r2";
   auto e = tri::assemble(data, code);
+  auto run = tri::Interpreter(std::move(e));
+  run.enable_debug();
+  run.execute();
   int i = 123;
 }

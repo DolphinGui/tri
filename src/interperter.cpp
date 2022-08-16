@@ -1,8 +1,20 @@
 #include "tri/asm.hpp"
 
+#include <bit>
+#include <chrono>
+#include <iostream>
+#include <string_view>
+#include <thread>
+
+#include "fmt/format.h"
+
 using namespace tri;
-namespace {}
-tri::Interpreter::Interpreter(Executable e)
+namespace {
+std::string_view log(Instruction i) {
+  return tri::instruction_names.at(i.instruct);
+}
+} // namespace
+tri::Interpreter::Interpreter(Executable &&e)
     : text(std::move(e.text)), stack(std::move(e.data)) {
   sp() = stack.size();
 }
@@ -14,31 +26,74 @@ void tri::Interpreter::execute() {
     case Type::reg:
       return reg(o.reg.operand);
     case Type::lit:
-      // return o.literal.;
-      break;
+      return tri::Word{.data = std::rotl(o.literal.value, o.literal.rotate)};
     }
   };
   while (true) {
     auto instruction = text[ip()];
-    ++ip().data;
+    ip() = ip().data + 1;
+    auto a = operand(instruction.a), b = operand(instruction.b);
+    if (debug)
+      fmt::print("{0} callled: ip {1}\n", log(instruction), int(ip().data));
 
     switch (instruction.instruct) {
     case InstructionType::hlt:
       return;
-    case InstructionType::addi:
-
-    case InstructionType::subi:
-    case InstructionType::muli:
-    case InstructionType::divi:
-    case InstructionType::mov:
-    case InstructionType::out:
-    case InstructionType::jmp:
-    case InstructionType::jn:
-    case InstructionType::je:
-    case InstructionType::call:
-    case InstructionType::alloc:
+    case InstructionType::addi: {
+      auto &out = reg(instruction.out);
+      out = a + b;
+      break;
+    }
+    case InstructionType::subi: {
+      auto &out = reg(instruction.out);
+      out = a - b;
+      break;
+    }
+    case InstructionType::muli: {
+      auto &out = reg(instruction.out);
+      out = a * b;
+      break;
+    }
+    case InstructionType::divi: {
+      auto &out = reg(instruction.out);
+      out = a / b;
+      break;
+    }
+    case InstructionType::mov: {
+      reg(instruction.b) = a;
+      break;
+    }
+    case InstructionType::out: {
+      std::cout << char(a);
+      break;
+    }
+    case InstructionType::jmp: {
+      ip() = a;
+      break;
+    }
+    case InstructionType::jn: {
+      if (a != 0)
+        ip() = b;
+      break;
+    }
+    case InstructionType::je: {
+      if (a == 0)
+        ip() = b;
+      break;
+    }
+    case InstructionType::call: {
+      rp() = ip();
+      ip() = a;
+      break;
+    }
+    case InstructionType::alloc: {
+      return; // todo implement later
+    }
     case InstructionType::noop:
       break;
     }
+    using namespace std::chrono_literals;
+    if (debug)
+      std::this_thread::sleep_for(500ms);
   }
 }
