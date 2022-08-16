@@ -29,7 +29,7 @@ void tri::Interpreter::execute() {
       return tri::Word{.data = std::rotl(o.literal.value, o.literal.rotate)};
     }
   };
-  while (true) {
+  while (ip() < text.size()) {
     auto instruction = text[ip()];
     ip() = ip().data + 1;
     auto a = operand(instruction.a), b = operand(instruction.b);
@@ -64,7 +64,7 @@ void tri::Interpreter::execute() {
       break;
     }
     case InstructionType::out: {
-      std::cout << char(a);
+      std::cout << char(stack.at(a));
       break;
     }
     case InstructionType::jmp: {
@@ -72,13 +72,15 @@ void tri::Interpreter::execute() {
       break;
     }
     case InstructionType::jn: {
-      if (a != 0)
-        ip() = b;
+      auto &label = reg(instruction.out);
+      if (a != b)
+        ip() = label;
       break;
     }
     case InstructionType::je: {
-      if (a == 0)
-        ip() = b;
+      auto &label = reg(instruction.out);
+      if (a == b)
+        ip() = label;
       break;
     }
     case InstructionType::call: {
@@ -93,7 +95,5 @@ void tri::Interpreter::execute() {
       break;
     }
     using namespace std::chrono_literals;
-    if (debug)
-      std::this_thread::sleep_for(500ms);
   }
 }

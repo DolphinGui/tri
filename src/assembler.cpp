@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
+#include <cstring>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -27,10 +28,10 @@ unsigned operandCount(InstructionType i) {
   case InstructionType::muli:
   case InstructionType::divi:
   case InstructionType::addi:
-    return 3;
-  case InstructionType::mov:
   case InstructionType::jn:
   case InstructionType::je:
+    return 3;
+  case InstructionType::mov:
     return 2;
   case InstructionType::out:
   case InstructionType::jmp:
@@ -103,8 +104,8 @@ Literal toLit(uchar val) {
 Instruction finishInstruction(const UnfinishedInstruction &s,
                               const MappedData &data) {
   auto reg = [&](const std::string &s) {
-    if(s.empty()){
-        return tri::Register::invalid;
+    if (s.empty()) {
+      return tri::Register::invalid;
     }
     auto reg = tri::register_table.find(s);
     if (reg != tri::register_table.end()) {
@@ -120,6 +121,11 @@ Instruction finishInstruction(const UnfinishedInstruction &s,
     auto global = data.map.find(s);
     if (global != data.map.end()) {
       return Operand{.literal = toLit(global->second)};
+    }
+    char *c = nullptr;
+    auto i = std::strtol(s.c_str(), &c, 0);
+    if (c != nullptr) {
+      return Operand{.literal = toLit(i)};
     }
     throw std::runtime_error("Unfinished instruction has not been found");
   };
@@ -175,15 +181,26 @@ MappedData processData(const char *d) {
     }
     if (type == ".ascii") {
       RE2::FindAndConsume(&line, R"('(.*)')", &data);
+      for(auto it = data.begin(); it != data.end() ; ++it){
+        if(it != data.end() && *it == '\\'){
+          auto lookahead = it;
+          ++lookahead;
+          if(*lookahead == 'n'){
+            *it = '\n';
+            it = --data.erase(lookahead);
+          }
+        }
+      }
       for (uint32_t c : data) {
         results.push_back(Word{c});
       }
+    substitutions.insert({identifier, start});
     } else if (type == ".int") {
       RE2::FindAndConsume(&line, R"((.+)\s*)", &data);
       auto i = std::strtol(data.c_str(), nullptr, 0);
       results.push_back(Word{static_cast<uint32_t>(i)});
+    substitutions.insert({identifier, i});
     }
-    substitutions.insert({identifier, start});
   }
   return {results, substitutions};
 }
