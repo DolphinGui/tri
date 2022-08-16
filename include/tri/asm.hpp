@@ -90,8 +90,9 @@ class Interpreter final {
     uint32_t begin;
     uint32_t end() const noexcept { return data.size() + begin; }
     bool inRange(uint32_t ptr) const noexcept {
-      return ptr > begin && ptr < end();
+      return ptr >= begin && ptr < end();
     }
+    Word &deref(uint32_t ptr) { return data.at(ptr - begin); }
     std::vector<Word> data;
   };
   std::vector<Allocation> heap;
@@ -117,6 +118,7 @@ class Interpreter final {
   }
 
   Word alloc(uint32_t size);
+  Word &deref(Word ptr);
 
 public:
   std::function<uint32_t()> in;

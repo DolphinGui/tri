@@ -95,11 +95,11 @@ void tri::Interpreter::execute() {
       break;
     }
     case InstructionType::load: {
-      reg(instruction.b) = stack.at(a);
+      reg(instruction.b) = deref(a);
       break;
     }
     case InstructionType::store: {
-      stack.at(b) = reg(instruction.a);
+      deref(b) = reg(instruction.a);
       break;
     }
     case InstructionType::in: {
@@ -122,7 +122,20 @@ Word tri::Interpreter::alloc(uint32_t size) {
     throw std::runtime_error("out of memory");
   }
   auto alloc = Allocation{begin};
-  alloc.data.reserve(size);
+  alloc.data.resize(size);
   heap.push_back(std::move(alloc));
   return Word{.data = begin, .is_alloc = true};
+}
+
+Word &tri::Interpreter::deref(Word ptr) {
+  if (!ptr.is_alloc) {
+    return stack.at(ptr);
+  } else {
+    for (auto &alloc : heap) {
+      if (alloc.inRange(ptr)) {
+        return alloc.deref(ptr);
+      }
+    }
+  }
+  throw std::runtime_error("invalid derefence");
 }
