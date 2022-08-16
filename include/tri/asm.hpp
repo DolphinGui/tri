@@ -3,10 +3,11 @@
 #include <array>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
+#include <stdexcept>
 #include <string>
 #include <unordered_map>
 #include <vector>
-#include <stdexcept>
 
 namespace tri {
 using uchar = unsigned char;
@@ -25,7 +26,7 @@ std::unordered_map<std::string_view, InstructionType> const instruction_table =
 #undef X
 };
 
-std::unordered_map<InstructionType,std::string_view > const instruction_names =
+std::unordered_map<InstructionType, std::string_view> const instruction_names =
     {
 #define X(a) {InstructionType::a, #a},
 #include "tri/detail/InstructionMacros"
@@ -67,9 +68,8 @@ struct Instruction {
 };
 
 struct Word {
-  uint32_t data : 30;
+  uint32_t data : 31;
   bool is_alloc : 1 = false;
-  bool mark : 1 = false;
   Word &operator=(uint32_t d) {
     data = d;
     return *this;
@@ -86,8 +86,15 @@ Executable assemble(const char *data, const char *assembly);
 
 class Interpreter final {
   std::vector<Word> stack;
-  std::vector<uint32_t> allocation_sizes;
-  std::vector<std::vector<Word>> heap;
+  struct Allocation {
+    uint32_t begin;
+    uint32_t end() const noexcept { return data.size() + begin; }
+    bool inRange(uint32_t ptr) const noexcept {
+      return ptr > begin && ptr < end();
+    }
+    std::vector<Word> data;
+  };
+  std::vector<Allocation> heap;
   std::vector<Instruction> text;
   std::array<Word, 16> registers{};
   bool debug = false;
@@ -102,14 +109,19 @@ class Interpreter final {
     else
       throw std::logic_error("invalid register accessed");
   }
+
   auto &reg(Operand o) {
     if (o.reg.type != Type::reg)
       throw std::runtime_error("wrong operand access type");
     return reg(o.reg.operand);
   }
 
+  Word alloc(uint32_t size);
+
 public:
-  Interpreter(Executable&&);
+  std::function<uint32_t()> in;
+
+  Interpreter(Executable &&);
   void execute();
   size_t mem_consumption() const;
   void enable_debug() { debug = true; }

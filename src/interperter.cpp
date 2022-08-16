@@ -2,7 +2,9 @@
 
 #include <bit>
 #include <chrono>
+#include <cstdint>
 #include <iostream>
+#include <stdexcept>
 #include <string_view>
 #include <thread>
 
@@ -29,7 +31,7 @@ void tri::Interpreter::execute() {
       return tri::Word{.data = std::rotl(o.literal.value, o.literal.rotate)};
     }
   };
-  while (ip() < text.size()) {
+  while (true) {
     auto instruction = text[ip()];
     ip() = ip().data + 1;
     auto a = operand(instruction.a), b = operand(instruction.b);
@@ -89,11 +91,38 @@ void tri::Interpreter::execute() {
       break;
     }
     case InstructionType::alloc: {
-      return; // todo implement later
+      reg(instruction.b) = alloc(a);
+      break;
+    }
+    case InstructionType::load: {
+      reg(instruction.b) = stack.at(a);
+      break;
+    }
+    case InstructionType::store: {
+      stack.at(b) = reg(instruction.a);
+      break;
+    }
+    case InstructionType::in: {
+      reg(instruction.a) = in();
+      break;
     }
     case InstructionType::noop:
       break;
     }
     using namespace std::chrono_literals;
   }
+}
+
+Word tri::Interpreter::alloc(uint32_t size) {
+  uint32_t begin = 0;
+  if (!heap.empty()) {
+    begin = heap.back().end();
+  }
+  if (begin > 1 << 31) {
+    throw std::runtime_error("out of memory");
+  }
+  auto alloc = Allocation{begin};
+  alloc.data.reserve(size);
+  heap.push_back(std::move(alloc));
+  return Word{.data = begin, .is_alloc = true};
 }
