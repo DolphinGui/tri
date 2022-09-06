@@ -6,6 +6,7 @@
 #include <cstdint>
 #include <functional>
 #include <iostream>
+#include <limits>
 #include <span>
 #include <stdexcept>
 #include <string>
@@ -50,15 +51,30 @@ std::unordered_map<std::string_view, Register> const register_table = {
 
 enum struct Type : uchar { reg, lit };
 struct RegisterOperand {
+  Type type : 1 = Type::reg;
   Register operand : 7;
   operator Register() const noexcept { return operand; }
-  Type type : 1 = Type::reg;
 };
 struct Literal {
+  Type type : 1 = Type::lit;
   uchar rotate : 3;
   uchar value : 4;
+  constexpr Literal() = default;
+  constexpr Literal(uint32_t val) { convert(val); }
+  constexpr Literal &operator=(uint32_t val) {
+    convert(val);
+    return *this;
+  }
   operator uint32_t() const noexcept { return std::rotr(value, rotate); }
-  Type type : 1 = Type::lit;
+
+private:
+  void convert(uint32_t val) {
+    if (val < (1 << 4)) {
+      value = val;
+      rotate = 0;
+    } else
+      throw std::logic_error("have not implemented figuring out rotations yet");
+  }
 };
 struct [[gnu::packed]] WideLiteral {
   uint16_t value;
@@ -66,36 +82,80 @@ struct [[gnu::packed]] WideLiteral {
   WideLiteral() = default;
   constexpr WideLiteral(Literal l) noexcept
       : value(l.value), rotate(l.rotate) {}
+  constexpr WideLiteral(uint32_t val) { convert(val); }
   operator uint32_t() const noexcept { return std::rotr(value, rotate); }
+
+private:
+  void convert(uint32_t val) {
+    if (val < std::numeric_limits<decltype(value)>::max()) {
+      value = val;
+      rotate = 0;
+    } else
+      throw std::logic_error("have not implemented figuring out rotations yet");
+  }
 };
 static_assert(sizeof(WideLiteral) == 3, "WideLiteral is not packed");
+struct [[gnu::packed]] SemiLiteral {
+  Type type : 1 = Type::lit;
+  uint16_t value : 15;
+  SemiLiteral() = default;
+  constexpr SemiLiteral(Literal l) noexcept : value(l) {}
+  constexpr SemiLiteral(uint32_t val) { convert(val); }
+  operator uint32_t() const noexcept { return value; }
 
+private:
+  void convert(uint32_t val) {
+    if (val < (1 << 15)) {
+      value = val;
+    } else
+      throw std::logic_error("literal is out of bounds");
+  }
+};
 union Operand {
-  Literal literal;
+  Literal lit;
   RegisterOperand reg;
 };
 
 union WideOperand {
-  WideLiteral wide;
-  RegisterOperand r;
-  WideOperand() : wide() {}
-  constexpr WideOperand(Operand o) noexcept {
-    if (o.literal.type == Type::lit) {
-      wide = o.literal;
+  WideLiteral lit;
+  RegisterOperand reg;
+  WideOperand() : lit() {}
+  constexpr WideOperand(Operand o) {
+    if (o.lit.type == Type::lit) {
+      lit = o.lit;
     } else {
-      r = o.reg;
+      reg = o.reg;
     }
   }
 };
 
-struct Operands {
+union SemiwideOperand {
+  SemiLiteral lit;
+  RegisterOperand reg;
+  SemiwideOperand() : lit(0) {}
+  constexpr SemiwideOperand(Operand o) {
+    if (o.lit.type == Type::lit) {
+      lit = o.lit;
+    } else {
+      reg = o.reg;
+    }
+  }
+};
+
+struct TriOps {
   Operand a, b;
   Register out : 4;
 };
 
+struct [[gnu::packed]] BiOps {
+  Operand a;
+  SemiwideOperand b;
+};
+
 union Op {
-  WideOperand wide;
-  Operands ops;
+  WideOperand unary;
+  BiOps binary;
+  TriOps ternary;
 };
 
 enum struct opCount : unsigned char { zero, one, two, three };
@@ -141,16 +201,28 @@ struct Instruction {
   InstructionType instruct : 6;
   opCount count : 2;
   Op op;
+  Instruction(InstructionType type, TriOps o)
+      : instruct(type), count(operandCount(type)), op{.ternary = o} {
+    if (count != opCount::three) {
+      throw std::logic_error("non-unary operator is given too many operands.");
+    }
+  }
+  Instruction(InstructionType type, BiOps o)
+      : instruct(type), count(operandCount(type)), op{.binary = o} {
+    if (count != opCount::two) {
+      throw std::logic_error("non-unary operator is given too many operands.");
+    }
+  }
   Instruction(InstructionType type, WideOperand o)
-      : instruct(type), count(operandCount(type)), op{.wide = o} {
+      : instruct(type), count(operandCount(type)), op{.unary = o} {
     if (count != opCount::one) {
       throw std::logic_error("uninary operator is given too many operands.");
     }
   }
-  Instruction(InstructionType type, Operands o)
-      : instruct(type), count(operandCount(type)), op{.ops = o} {
-    if (count == opCount::one) {
-      throw std::logic_error("non-unary operator is given too many operands.");
+  Instruction(InstructionType type)
+      : instruct(type), count(operandCount(type)), op{} {
+    if (count != opCount::zero) {
+      throw std::logic_error("uninary operator is given too many operands.");
     }
   }
 };

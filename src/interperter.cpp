@@ -24,21 +24,21 @@ void handleNoop(tri::Interpreter &state, tri::Instruction i) {
   }
 }
 void handleUnary(tri::Interpreter &state, tri::Instruction i) {
-  auto wide = i.op.wide;
+  auto wide = i.op.unary;
   switch (i.instruct) {
   case InstructionType::out: {
-    state.out(state.reg(wide.r).val);
+    state.out(state.reg(wide.reg).val);
     return;
   }
   case InstructionType::in: {
-    state.reg(wide.r).val = state.in();
+    state.reg(wide.reg).val = state.in();
     return;
   }
   case InstructionType::call:
     state.rp().val = state.ip().val;
     [[fallthrough]];
   case InstructionType::jmp: {
-    state.ip().val = wide.wide;
+    state.ip().val = wide.lit;
     return;
   }
   default: {
@@ -47,14 +47,14 @@ void handleUnary(tri::Interpreter &state, tri::Instruction i) {
   }
 }
 void handleBinary(tri::Interpreter &state, tri::Instruction i) {
-  auto eval = [&](tri::Operand o) -> Word {
-    if (o.literal.type == tri::Type::lit) {
-      return Val(o.literal);
+  auto eval = [&](auto o) -> Word {
+    if (o.lit.type == tri::Type::lit) {
+      return Val(o.lit);
     } else {
       return state.reg(o.reg);
     }
   };
-  auto a = eval(i.op.ops.a), b = eval(i.op.ops.b);
+  auto a = eval(i.op.binary.a), b = eval(i.op.binary.b);
   switch (i.instruct) {
   case InstructionType::jnz:
     if (a != 0) {
@@ -68,16 +68,16 @@ void handleBinary(tri::Interpreter &state, tri::Instruction i) {
     return;
   case InstructionType::alloc:
     state.heap.push_back(tri::Interpreter::Allocation(static_cast<Val>(a)));
-    state.reg(i.op.ops.b).alloc = tri::Alloc(state.heap.size() - 1, 0);
+    state.reg(i.op.ternary.b).alloc = tri::Alloc(state.heap.size() - 1, 0);
     return;
   case InstructionType::mov:
-    state.reg(i.op.ops.b) = a;
+    state.reg(i.op.ternary.b) = a;
     return;
   case InstructionType::load:
-    state.reg(i.op.ops.b) = state.deref(state.reg(i.op.ops.a));
+    state.reg(i.op.ternary.b) = state.deref(state.reg(i.op.ternary.a));
     return;
   case InstructionType::store:
-    state.deref(state.reg(i.op.ops.b)) = state.reg(i.op.ops.a);
+    state.deref(state.reg(i.op.ternary.b)) = state.reg(i.op.ternary.a);
     return;
   default:
     throw std::logic_error("non-tertiary operator incorrectly handled");
@@ -85,14 +85,14 @@ void handleBinary(tri::Interpreter &state, tri::Instruction i) {
 }
 void handleTertiary(tri::Interpreter &state, tri::Instruction i) {
   auto eval = [&](tri::Operand o) -> Word {
-    if (o.literal.type == tri::Type::lit) {
-      return Val(o.literal);
+    if (o.lit.type == tri::Type::lit) {
+      return Val(o.lit);
     } else {
       return state.reg(o.reg);
     }
   };
-  auto a = eval(i.op.ops.a), b = eval(i.op.ops.b);
-  auto out = [&]() -> Word & { return state.reg(i.op.ops.out); };
+  auto a = eval(i.op.ternary.a), b = eval(i.op.ternary.b);
+  auto out = [&]() -> Word & { return state.reg(i.op.ternary.out); };
   switch (i.instruct) {
   case InstructionType::addi: {
     auto n = a + b;
@@ -120,12 +120,12 @@ tri::Interpreter::Interpreter(Executable &&e)
 
 void tri::Interpreter::execute() {
   auto operand = [this](Operand o) -> tri::Word {
-    auto type = o.literal.type;
+    auto type = o.lit.type;
     switch (type) {
     case Type::reg:
       return reg(o.reg.operand);
     case Type::lit:
-      return tri::Word(std::rotl(o.literal.value, o.literal.rotate));
+      return tri::Word(std::rotl(o.lit.value, o.lit.rotate));
     }
   };
   while (true) {

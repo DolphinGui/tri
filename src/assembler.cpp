@@ -81,13 +81,25 @@ struct MappedData {
 };
 using FunctionMap = std::unordered_map<std::string, size_t>;
 
-Literal toLit(uchar val) {
-  if (val < (1 << 4)) {
-    return Literal{.rotate = 0, .value = val};
-  }
-  throw std::logic_error("have not implemented figuring out rotations yet");
-}
 using Value = std::variant<Register, size_t>;
+template <typename R> auto get(Value v) -> R {
+  R result{};
+  std::visit(
+      [&](auto &&val) {
+        using T = std::decay_t<decltype(val)>;
+        if constexpr (std::is_same_v<T, Register>) {
+          result.reg.operand = val;
+          result.reg.type = tri::Type::reg;
+        } else if constexpr (std::is_same_v<T, size_t>) {
+          result.lit = val;
+          result.reg.type = tri::Type::lit;
+        }
+        static_assert(std::is_same_v<T, Register> || std::is_same_v<T, size_t>,
+                      "invalid type");
+      },
+      v);
+  return result;
+};
 Instruction finishInstruction(const UnfinishedInstruction &s,
                               const MappedData &data) {
   auto reg = [&](std::string_view s) {
@@ -131,31 +143,20 @@ Instruction finishInstruction(const UnfinishedInstruction &s,
     r = reg(s.out);
     ++num;
   }
-  auto get = [](Value v) -> Operand {
-    Operand result{};
-    std::visit(
-        [&](auto &&val) {
-          using T = std::decay_t<decltype(val)>;
-          if constexpr (std::is_same_v<T, Register>) {
-            result.reg.operand = val;
-            result.reg.type = tri::Type::reg;
-          } else if constexpr (std::is_same_v<T, size_t>) {
-            result.literal = toLit(val);
-            result.reg.type = tri::Type::lit;
-          }
-          static_assert(std::is_same_v<T, Register> ||
-                            std::is_same_v<T, size_t>,
-                        "invalid type");
-        },
-        v);
-    return result;
-  };
-  auto c = operandCount(s.instruct);
-  if (c == opCount::one) {
-    return Instruction(s.instruct, WideOperand(get(vals[0])));
+  switch (operandCount(s.instruct)) {
+  case opCount::zero:
+    return Instruction(s.instruct);
+  case opCount::one:
+    return Instruction(s.instruct, WideOperand(get<WideOperand>(vals[0])));
+  case opCount::two:
+    return Instruction(s.instruct, BiOps{.a = get<Operand>(vals[0]),
+                                         .b = get<SemiwideOperand>(vals[1])});
+  case opCount::three:
+    return Instruction(s.instruct, TriOps{.a = get<Operand>(vals[0]),
+                                          .b = get<Operand>(vals[1]),
+                                          .out = r});
   }
-  return Instruction(s.instruct,
-                     Operands{.a = get(vals[0]), .b = get(vals[1]), .out = r});
+  throw std::logic_error("invalid instruction operand count");
 }
 
 using Code = std::vector<UnfinishedInstruction>;
