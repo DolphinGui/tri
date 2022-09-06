@@ -198,30 +198,28 @@ inline opCount count(unsigned i) {
   throw std::logic_error("invalid opcount");
 }
 struct Instruction {
-  InstructionType instruct : 6;
-  opCount count : 2;
+  InstructionType instruct : 4;
+  int reserved : 4;
   Op op;
   Instruction(InstructionType type, TriOps o)
-      : instruct(type), count(operandCount(type)), op{.ternary = o} {
-    if (count != opCount::three) {
+      : instruct(type), op{.ternary = o} {
+    if (operandCount(type) != opCount::three) {
       throw std::logic_error("non-unary operator is given too many operands.");
     }
   }
-  Instruction(InstructionType type, BiOps o)
-      : instruct(type), count(operandCount(type)), op{.binary = o} {
-    if (count != opCount::two) {
+  Instruction(InstructionType type, BiOps o) : instruct(type), op{.binary = o} {
+    if (operandCount(type) != opCount::two) {
       throw std::logic_error("non-unary operator is given too many operands.");
     }
   }
   Instruction(InstructionType type, WideOperand o)
-      : instruct(type), count(operandCount(type)), op{.unary = o} {
-    if (count != opCount::one) {
+      : instruct(type), op{.unary = o} {
+    if (operandCount(type) != opCount::one) {
       throw std::logic_error("uninary operator is given too many operands.");
     }
   }
-  Instruction(InstructionType type)
-      : instruct(type), count(operandCount(type)), op{} {
-    if (count != opCount::zero) {
+  Instruction(InstructionType type) : instruct(type), op{} {
+    if (operandCount(type) != opCount::zero) {
       throw std::logic_error("uninary operator is given too many operands.");
     }
   }

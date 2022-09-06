@@ -12,12 +12,12 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <type_traits>
+#include <unordered_map>
 #include <variant>
 
 #include <re2/re2.h>
-#include <string_view>
-#include <unordered_map>
 
 using namespace tri;
 
@@ -119,7 +119,10 @@ Instruction finishInstruction(const UnfinishedInstruction &s,
     if (global != data.map.end()) {
       return global->second;
     }
-
+    auto label = data.labels.find(s);
+    if (label != data.labels.end()) {
+      return label->second;
+    }
     char *c = nullptr;
     auto i = std::strtol(s.c_str(), &c, 0);
     if (c != nullptr) {
@@ -165,18 +168,21 @@ std::vector<Instruction> processAsm(const char *a, MappedData &data) {
   std::string assembly = a;
   auto n = std::istringstream(assembly);
   Code results;
+  size_t ip = 0;
   for (std::string ln; std::getline(n, ln);) {
     trim(ln);
     auto line = re2::StringPiece(ln);
     std::string instruction;
     RE2::FindAndConsume(&line, R"((.+?)\s+)", &instruction);
-    if (line.empty())
+    if (line.empty() && instruction.empty())
       continue;
-    if (instruction.starts_with('#')) {
-
+    if (line.starts_with("#")) {
+      data.labels.insert({std::string(line), ip});
+      continue;
     } else {
       results.push_back(processInstruction(instruction, line));
     }
+    ++ip;
   }
   results.push_back(UnfinishedInstruction{.instruct = InstructionType::hlt});
   results.shrink_to_fit();

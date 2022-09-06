@@ -134,8 +134,7 @@ void tri::Interpreter::execute() {
     if (int(ip().val) == 13) {
       int i = 123;
     }
-    auto ops = instruction.count;
-    switch (ops) {
+    switch (tri::operandCount(instruction.instruct)) {
     case opCount::zero:
       if (instruction.instruct == tri::InstructionType::hlt)
         return;
