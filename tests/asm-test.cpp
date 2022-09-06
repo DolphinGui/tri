@@ -6,14 +6,6 @@
 int main() {
   auto data = ".ascii str 'hello world!\\n'\n"
               ".int strlen 13";
-  auto print_string = "mov str r0\n"        // begin
-                      "mov str r1\n"        // end
-                      "addi r1 strlen r1\n" // end = begin + strlen
-                      "mov ip r2\n"         // r2 is mark
-                      "out r0\n"            // print char
-                      "addi r0 1 r0\n"      // increment begin
-                      "jn r0 r1 r2";        // jump if begin != end
-
   auto read_string = "in r0\n"         // size of string
                      "alloc r0 r1\n"   // malloc(strsize) = begin
                      "mov r1 r2\n"     // end
@@ -26,7 +18,8 @@ int main() {
 
                      "subi r1 r0 r1\n" // begin = begin - strsize
                      "mov ip rp\n"     // rp is mark
-                     "out r1\n"        // print char
+                     "load r1 r3\n"
+                     "out r3\n"        // print char
                      "addi r1 1 r1\n"  // increment begin
                      "jn r1 r2 rp";
   auto e = tri::assemble(data, read_string);

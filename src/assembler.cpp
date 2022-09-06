@@ -2,14 +2,21 @@
 #include "tri/asm.hpp"
 
 #include <algorithm>
+#include <array>
+#include <bit>
 #include <cctype>
+#include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <span>
 #include <sstream>
 #include <stdexcept>
 #include <string>
+#include <type_traits>
+#include <variant>
 
 #include <re2/re2.h>
+#include <string_view>
 #include <unordered_map>
 
 using namespace tri;
@@ -22,41 +29,16 @@ void trim(std::string &s) {
   s = substr;
 }
 
-unsigned operandCount(InstructionType i) {
-  switch (i) {
-  case InstructionType::subi:
-  case InstructionType::muli:
-  case InstructionType::divi:
-  case InstructionType::addi:
-  case InstructionType::jn:
-  case InstructionType::je:
-    return 3;
-  case InstructionType::mov:
-  case InstructionType::load:
-  case InstructionType::store:
-  case InstructionType::alloc:
-    return 2;
-  case InstructionType::out:
-  case InstructionType::jmp:
-  case InstructionType::call:
-  case InstructionType::in:
-    return 1;
-  case InstructionType::hlt:
-  case InstructionType::noop:
-    return 0;
-  }
-}
-
 bool isJump(InstructionType i) {
   switch (i) {
   case InstructionType::subi:
   case InstructionType::muli:
   case InstructionType::divi:
   case InstructionType::addi:
-  case InstructionType::mov:
   case InstructionType::out:
   case InstructionType::alloc:
   case InstructionType::hlt:
+  case InstructionType::mov:
   case InstructionType::noop:
   case InstructionType::load:
   case InstructionType::store:
@@ -77,7 +59,7 @@ struct UnfinishedInstruction {
 UnfinishedInstruction processInstruction(std::string_view i,
                                          re2::StringPiece &s) {
   auto type = tri::instruction_table.at(i);
-  auto operand_count = operandCount(type);
+  auto operand_count = static_cast<int>(operandCount(type));
   UnfinishedInstruction unfinished;
   unfinished.instruct = type;
   if (operand_count >= 1) {
@@ -96,61 +78,91 @@ struct MappedData {
   std::vector<Word> data;
   std::unordered_map<std::string, size_t> map;
 };
+using FunctionMap = std::unordered_map<std::string, size_t>;
 
 Literal toLit(uchar val) {
   if (val < (1 << 4)) {
     return Literal{.rotate = 0, .value = val};
   }
   throw std::logic_error("have not implemented figuring out rotations yet");
-  for (auto i = 1; i < 3; ++i) {
-    uchar n = val << i;
-  }
 }
-
+using Value = std::variant<Register, size_t>;
 Instruction finishInstruction(const UnfinishedInstruction &s,
                               const MappedData &data) {
-  auto reg = [&](const std::string &s) {
-    if (s.empty()) {
-      return tri::Register::invalid;
-    }
+  auto reg = [&](std::string_view s) {
     auto reg = tri::register_table.find(s);
     if (reg != tri::register_table.end()) {
       return reg->second;
     }
-    throw std::runtime_error("register not found");
+    return tri::Register::invalid;
   };
-  auto process = [&](const std::string &s) -> Operand {
+
+  auto process = [&](const std::string &s) -> Value {
     auto reg = tri::register_table.find(s);
     if (reg != tri::register_table.end()) {
-      return Operand{.reg = RegisterOperand{.operand = reg->second}};
+      return reg->second;
     }
     auto global = data.map.find(s);
     if (global != data.map.end()) {
-      return Operand{.literal = toLit(global->second)};
+      return global->second;
     }
+
     char *c = nullptr;
     auto i = std::strtol(s.c_str(), &c, 0);
     if (c != nullptr) {
-      return Operand{.literal = toLit(i)};
+      return size_t(i);
     }
     throw std::runtime_error("Unfinished instruction has not been found");
   };
-  auto maybe = [&](std::string_view s) {
-    auto n = std::string(s);
-    if (!s.empty())
-      return process(n);
-    return Operand{.literal = Literal{}};
+
+  unsigned num = 0;
+  std::array<Value, 2> vals{};
+  Register r;
+  if (!s.a.empty()) {
+    vals[0] = process(s.a);
+    ++num;
+  }
+  if (!s.b.empty()) {
+    vals[1] = process(s.b);
+    ++num;
+  }
+  if (!s.out.empty()) {
+    r = reg(s.out);
+    ++num;
+  }
+  auto get = [](Value v) -> Operand {
+    Operand result{};
+    std::visit(
+        [&](auto &&val) {
+          using T = std::decay_t<decltype(val)>;
+          if constexpr (std::is_same_v<T, Register>) {
+            result.reg.operand = val;
+            result.reg.type = tri::Type::reg;
+          } else if constexpr (std::is_same_v<T, size_t>) {
+            result.literal = toLit(val);
+            result.reg.type = tri::Type::lit;
+          }
+          static_assert(std::is_same_v<T, Register> ||
+                            std::is_same_v<T, size_t>,
+                        "invalid type");
+        },
+        v);
+    return result;
   };
-  return Instruction{.instruct = s.instruct,
-                     .a = maybe(s.a),
-                     .b = maybe(s.b),
-                     .out = reg(s.out)};
+  auto c = operandCount(s.instruct);
+  if (c == opCount::one) {
+    return Instruction(s.instruct, WideOperand(get(vals[0])));
+  }
+  return Instruction(s.instruct,
+                     Operands{.a = get(vals[0]), .b = get(vals[1]), .out = r});
 }
+
+using Code = std::vector<UnfinishedInstruction>;
 
 std::vector<Instruction> processAsm(const char *a, MappedData &data) {
   std::string assembly = a;
   auto n = std::istringstream(assembly);
-  std::vector<UnfinishedInstruction> results;
+  Code results;
   for (std::string ln; std::getline(n, ln);) {
     trim(ln);
     auto line = re2::StringPiece(ln);
@@ -159,18 +171,18 @@ std::vector<Instruction> processAsm(const char *a, MappedData &data) {
     if (!instruction.empty())
       results.push_back(processInstruction(instruction, line));
   }
+  results.push_back(UnfinishedInstruction{.instruct = InstructionType::hlt});
   results.shrink_to_fit();
-  std::vector<Instruction> done;
-  done.reserve(results.size() + 1);
-  std::ranges::for_each(results, [&](const UnfinishedInstruction &i) {
-    done.push_back(finishInstruction(i, data));
-  });
-  done.push_back(Instruction{.instruct = InstructionType::hlt});
-  return done;
+  std::vector<Instruction> finished;
+  finished.reserve(results.size());
+  for (auto &n : results) {
+    finished.push_back(finishInstruction(n, data));
+  }
+  return finished;
 }
 
-MappedData processData(const char *d) {
-  std::string data = d;
+MappedData processData(std::string_view d) {
+  auto data = std::string(d);
   auto n = std::istringstream(data);
   std::vector<Word> results;
   std::unordered_map<std::string, size_t> substitutions;
@@ -199,22 +211,28 @@ MappedData processData(const char *d) {
         }
       }
       for (uint32_t c : data) {
-        results.push_back(Word{c});
+        results.push_back(Word{Val{c}});
       }
       substitutions.insert({identifier, start});
     } else if (type == ".int") {
       RE2::FindAndConsume(&line, R"((.+)\s*)", &data);
       auto i = std::strtol(data.c_str(), nullptr, 0);
-      results.push_back(Word{static_cast<uint32_t>(i)});
+      results.push_back(Word{Val{static_cast<uint32_t>(i)}});
       substitutions.insert({identifier, i});
     }
   }
   return {results, substitutions};
 }
+struct UnlinkedFunction {
+  std::string name;
+  Code code;
+};
 
 } // namespace
-Executable tri::assemble(const char *d, const char *a) {
+namespace tri {
+Executable assemble(const char *d, const char *a) {
   auto m = processData(d);
   auto instructions = processAsm(a, m);
   return {std::move(m.data), std::move(instructions)};
 }
+} // namespace tri
