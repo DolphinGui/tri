@@ -46,6 +46,43 @@ void handleUnary(tri::Interpreter &state, tri::Instruction i) {
   }
   }
 }
+void handleBinary(tri::Interpreter &state, tri::Instruction i) {
+  auto eval = [&](tri::Operand o) -> Word {
+    if (o.literal.type == tri::Type::lit) {
+      return Val(o.literal);
+    } else {
+      return state.reg(o.reg);
+    }
+  };
+  auto a = eval(i.op.ops.a), b = eval(i.op.ops.b);
+  switch (i.instruct) {
+  case InstructionType::jnz:
+    if (a != 0) {
+      state.ip().val = b;
+    }
+    return;
+  case InstructionType::jez:
+    if (a == 0) {
+      state.ip().val = b;
+    }
+    return;
+  case InstructionType::alloc:
+    state.heap.push_back(tri::Interpreter::Allocation(static_cast<Val>(a)));
+    state.reg(i.op.ops.b).alloc = tri::Alloc(state.heap.size() - 1, 0);
+    return;
+  case InstructionType::mov:
+    state.reg(i.op.ops.b) = a;
+    return;
+  case InstructionType::load:
+    state.reg(i.op.ops.b) = state.deref(state.reg(i.op.ops.a));
+    return;
+  case InstructionType::store:
+    state.deref(state.reg(i.op.ops.b)) = state.reg(i.op.ops.a);
+    return;
+  default:
+    throw std::logic_error("non-tertiary operator incorrectly handled");
+  }
+}
 void handleTertiary(tri::Interpreter &state, tri::Instruction i) {
   auto eval = [&](tri::Operand o) -> Word {
     if (o.literal.type == tri::Type::lit) {
@@ -71,29 +108,6 @@ void handleTertiary(tri::Interpreter &state, tri::Instruction i) {
   case InstructionType::divi:
     out() = a / b;
     return;
-  case InstructionType::jn:
-    if (a != b) {
-      state.ip().val = out();
-    }
-    return;
-  case InstructionType::je:
-    if (a == b) {
-      state.ip().val = out();
-    }
-    return;
-  case InstructionType::alloc:
-    state.heap.push_back(tri::Interpreter::Allocation(static_cast<Val>(a)));
-    state.reg(i.op.ops.b).alloc = tri::Alloc(state.heap.size() - 1, 0);
-    return;
-  case InstructionType::mov:
-    state.reg(i.op.ops.b) = a;
-    return;
-  case InstructionType::load:
-    state.reg(i.op.ops.b) = state.deref(state.reg(i.op.ops.a));
-    return;
-  case InstructionType::store:
-    state.deref(state.reg(i.op.ops.b)) = state.reg(i.op.ops.a);
-    return;
   default:
     throw std::logic_error("non-tertiary operator incorrectly handled");
   }
@@ -117,6 +131,9 @@ void tri::Interpreter::execute() {
   while (true) {
     auto instruction = text[ip().val];
     ip().val = ip().val + 1;
+    if (int(ip().val) == 13) {
+      int i = 123;
+    }
     auto ops = instruction.count;
     switch (ops) {
     case opCount::zero:
@@ -127,15 +144,12 @@ void tri::Interpreter::execute() {
       handleUnary(*this, instruction);
       break;
     case opCount::two:
-      handleTertiary(*this, instruction);
+      handleBinary(*this, instruction);
       break;
     case opCount::three:
       handleTertiary(*this, instruction);
       break;
     default:
-      if (ops == opCount::three) {
-        std::cerr << "three\n";
-      }
       throw std::logic_error("this really shouldn't happen");
     }
     if (debug)

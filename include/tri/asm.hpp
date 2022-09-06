@@ -107,13 +107,13 @@ inline opCount operandCount(InstructionType i) {
   case InstructionType::muli:
   case InstructionType::divi:
   case InstructionType::addi:
-  case InstructionType::jn:
-  case InstructionType::je:
     return three;
   case InstructionType::mov:
   case InstructionType::load:
   case InstructionType::store:
   case InstructionType::alloc:
+  case InstructionType::jnz:
+  case InstructionType::jez:
     return two;
   case InstructionType::out:
   case InstructionType::jmp:
@@ -229,8 +229,16 @@ template <typename Op> Word WordOps(Op op, Word left, Word right) {
 inline auto operator+(Word l, Word r) {
   return WordOps([](auto l, auto r) { return int(l) + r; }, l, r);
 }
-inline auto operator-(Word l, Word r) {
-  return WordOps([](auto l, auto r) { return int(l) - r; }, l, r);
+inline auto operator-(Word left, Word right) {
+  if (left.alloc.is_alloc != right.val.is_alloc) {
+    if (left.alloc.is_alloc)
+      return Word(Alloc(left.alloc.number, left.alloc.offset - right.val));
+    else
+      return Word(Alloc(right.alloc.number, right.alloc.offset - left.val));
+  } else if (!left.val.is_alloc && !right.val.is_alloc) {
+    return Word(Val(unsigned(left.val) - right.val));
+  }
+  return Word(Val(left.alloc.offset - right.alloc.offset));
 }
 template <typename Op> Word WordValOps(Op op, Word left, Word right) {
   if (!left.val.is_alloc && !right.val.is_alloc) {

@@ -21,8 +21,8 @@ divi [a] / [b] = [c]
 mov  [a]-> [b]  
 out prints [a]  
 jmp goto [a]  
-jn if [a]==0 goto [b]  
-je if [a]!=0 goto [b]  
+jnz if [a]==0 goto [b]  
+jez if [a]!=0 goto [b]  
 call goto [a] and store (ip) into (rp)  
 alloc allocate [a] storage and put the pointer into [b]  
 noop does absolutely nothing

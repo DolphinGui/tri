@@ -45,8 +45,8 @@ bool isJump(InstructionType i) {
   case InstructionType::in:
     return false;
   case InstructionType::jmp:
-  case InstructionType::jn:
-  case InstructionType::je:
+  case InstructionType::jnz:
+  case InstructionType::jez:
   case InstructionType::call:
     return true;
   }
@@ -77,6 +77,7 @@ UnfinishedInstruction processInstruction(std::string_view i,
 struct MappedData {
   std::vector<Word> data;
   std::unordered_map<std::string, size_t> map;
+  std::unordered_map<std::string, uint16_t> labels;
 };
 using FunctionMap = std::unordered_map<std::string, size_t>;
 
@@ -168,8 +169,13 @@ std::vector<Instruction> processAsm(const char *a, MappedData &data) {
     auto line = re2::StringPiece(ln);
     std::string instruction;
     RE2::FindAndConsume(&line, R"((.+?)\s+)", &instruction);
-    if (!instruction.empty())
+    if (line.empty())
+      continue;
+    if (instruction.starts_with('#')) {
+
+    } else {
       results.push_back(processInstruction(instruction, line));
+    }
   }
   results.push_back(UnfinishedInstruction{.instruct = InstructionType::hlt});
   results.shrink_to_fit();

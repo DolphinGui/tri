@@ -14,14 +14,16 @@ int main() {
                      "in r3\n"         // getchar
                      "store r3 r1\n"   // store getchar
                      "addi r1 1 r1\n"  // increment begin
-                     "jn r1 r2 rp\n"   // jump if begin != end
+                     "subi r2 r1 r4\n" // compare
+                     "jnz r4 rp\n"   // jump if begin != end
 
                      "subi r1 r0 r1\n" // begin = begin - strsize
                      "mov ip rp\n"     // rp is mark
                      "load r1 r3\n"
                      "out r3\n"        // print char
                      "addi r1 1 r1\n"  // increment begin
-                     "jn r1 r2 rp";
+                     "subi r2 r1 r4\n" // compare
+                     "jnz r4 rp";
   auto e = tri::assemble(data, read_string);
   auto run = tri::Interpreter(std::move(e));
   std::string input = "hello world!\n";
