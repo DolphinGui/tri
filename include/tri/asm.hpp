@@ -77,7 +77,8 @@ private:
   }
 };
 struct [[gnu::packed]] WideLiteral {
-  uint16_t value;
+  Type type : 1 = Type::lit;
+  uint16_t value : 15;
   uint8_t rotate;
   WideLiteral() = default;
   constexpr WideLiteral(Literal l) noexcept
@@ -198,8 +199,8 @@ inline opCount count(unsigned i) {
   throw std::logic_error("invalid opcount");
 }
 struct Instruction {
-  InstructionType instruct : 4;
-  int reserved : 4;
+  InstructionType instruct : 6;
+  int reserved : 2;
   Op op;
   Instruction(InstructionType type, TriOps o)
       : instruct(type), op{.ternary = o} {
@@ -247,11 +248,12 @@ struct Alloc {
   uint16_t offset : 15;
   bool is_alloc : 1 = true;
 };
-
+struct Nullword_t {};
+constexpr inline static Nullword_t nullw;
 union Word {
   Alloc alloc;
   Val val;
-  Word() : val() {}
+  Word() : val(0) {}
   Word(Alloc a) : alloc(a) {}
   Word(Val v) : val(v) {}
   Word &operator=(Word other) {
@@ -281,6 +283,16 @@ union Word {
     return val;
   }
 };
+
+inline bool operator==(Word w, Nullword_t n) {
+  if (w.alloc.is_alloc) {
+    return false;
+  } else {
+    return w.val.data == 0;
+  }
+}
+inline bool operator!=(Word w, Nullword_t n) { return !(w == n); }
+
 inline bool operator==(Word l, Word r) {
   return l.alloc.is_alloc == r.alloc.is_alloc && l.val == r.val;
 }
@@ -376,4 +388,22 @@ public:
   void enable_debug() { debug = true; }
 };
 } // namespace tri
-#undef TRI_ENUM_TABLE
+
+#ifdef TRI_ENABLE_FMT_FORMATTING
+
+template <> struct fmt::formatter<tri::Word> {
+  constexpr auto parse(format_parse_context &ctx) -> decltype(ctx.begin()) {
+    return ctx.begin();
+  }
+
+  template <typename FormatContext>
+  auto format(tri::Word w, FormatContext &ctx) const -> decltype(ctx.out()) {
+    // I have to int cast this stuff bc fmt for some reason likes taking
+    // const refs of stuff
+    if (w.alloc.is_alloc)
+      return fmt::format_to(ctx.out(), "({}, {})", int(w.alloc.number),
+                            int(w.alloc.offset));
+    return fmt::format_to(ctx.out(), "{0:x}", int(w.val.data));
+  }
+};
+#endif

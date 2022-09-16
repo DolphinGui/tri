@@ -173,11 +173,14 @@ std::vector<Instruction> processAsm(const char *a, MappedData &data) {
     trim(ln);
     auto line = re2::StringPiece(ln);
     std::string instruction;
-    RE2::FindAndConsume(&line, R"((.+?)\s+)", &instruction);
+    RE2::FindAndConsume(&line, R"((\S+)\s*)", &instruction);
     if (line.empty() && instruction.empty())
       continue;
-    if (line.starts_with("#")) {
-      data.labels.insert({std::string(line), ip});
+    if (instruction.starts_with("@")) {
+      if (!line.empty())
+        data.labels.insert({std::string(line), ip});
+      else
+        data.labels.insert({instruction, ip});
       continue;
     } else {
       results.push_back(processInstruction(instruction, line));

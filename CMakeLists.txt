@@ -25,3 +25,6 @@ target_link_libraries(triasm PRIVATE re2::re2 fmt)
 
 add_executable(asm-test ${CMAKE_SOURCE_DIR}/tests/asm-test.cpp)
 target_link_libraries(asm-test PRIVATE triasm)
+
+add_executable(btree ${CMAKE_SOURCE_DIR}/tests/btree.cpp)
+target_link_libraries(btree PRIVATE triasm)

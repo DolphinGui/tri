@@ -4,11 +4,19 @@
   // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
+
     {
       "type": "lldb",
       "request": "launch",
       "name": "asm-test",
       "program": "${workspaceFolder}/build/asm-test",
+      "args": [],
+      "cwd": "${workspaceFolder}/build"
+    }, {
+      "type": "lldb",
+      "request": "launch",
+      "name": "btree-test",
+      "program": "${workspaceFolder}/build/btree",
       "args": [],
       "cwd": "${workspaceFolder}/build"
     }
