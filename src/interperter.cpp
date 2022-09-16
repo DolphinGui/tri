@@ -17,111 +17,6 @@ namespace {
 std::string log(Instruction i) {
   return std::string(tri::instruction_names.at(i.instruct));
 }
-void handleNoop(tri::Interpreter &state, tri::Instruction i) {
-  switch (i.instruct) {
-  case InstructionType::noop:
-    return;
-  default:
-    throw std::runtime_error("Non-extern operator incorrectly handled");
-  }
-}
-void handleUnary(tri::Interpreter &state, tri::Instruction i) {
-  auto wide = i.op.unary;
-  auto eval = [&](auto o) -> Word {
-    if (o.lit.type == tri::Type::lit) {
-      return Val(o.lit);
-    } else {
-      return state.reg(o.reg);
-    }
-  };
-  switch (i.instruct) {
-  case InstructionType::out: {
-    state.out(state.reg(wide.reg).val);
-    return;
-  }
-  case InstructionType::in: {
-    state.reg(wide.reg).val.is_alloc = false;
-    state.reg(wide.reg).val = state.in();
-    return;
-  }
-  case InstructionType::call:
-    state.rp().val = state.ip().val;
-    [[fallthrough]];
-  case InstructionType::jmp: {
-    state.ip().val = eval(wide);
-    return;
-  }
-  default: {
-    throw std::logic_error("non-unary operator incorrectly handled");
-  }
-  }
-}
-void handleBinary(tri::Interpreter &state, tri::Instruction i) {
-  auto eval = [&](auto o) -> Word {
-    if (o.lit.type == tri::Type::lit) {
-      return Val(o.lit);
-    } else {
-      return state.reg(o.reg);
-    }
-  };
-  auto a = eval(i.op.binary.a), b = eval(i.op.binary.b);
-  switch (i.instruct) {
-  case InstructionType::jnz:
-    if (a != tri::nullw) {
-      state.ip().val = b;
-    }
-    return;
-  case InstructionType::jez:
-    if (a == tri::nullw) {
-      state.ip().val = b;
-    }
-    return;
-  case InstructionType::alloc:
-    state.heap.push_back(tri::Interpreter::Allocation(static_cast<Val>(a)));
-    state.reg(i.op.binary.b.reg).alloc = tri::Alloc(state.heap.size() - 1, 0);
-    return;
-  case InstructionType::mov:
-    state.reg(i.op.binary.b.reg) = a;
-    return;
-  case InstructionType::load:
-    state.reg(i.op.binary.b.reg) = state.deref(a);
-    return;
-  case InstructionType::store:
-    state.deref(state.reg(i.op.binary.b.reg)) = a;
-    return;
-  default:
-    throw std::logic_error("non-tertiary operator incorrectly handled");
-  }
-}
-void handleTertiary(tri::Interpreter &state, tri::Instruction i) {
-  auto eval = [&](tri::Operand o) -> Word {
-    if (o.lit.type == tri::Type::lit) {
-      return Val(o.lit);
-    } else {
-      return state.reg(o.reg);
-    }
-  };
-  auto a = eval(i.op.ternary.a), b = eval(i.op.ternary.b);
-  auto out = [&]() -> Word & { return state.reg(i.op.ternary.out); };
-  switch (i.instruct) {
-  case InstructionType::addi: {
-    auto n = a + b;
-    out() = n;
-    return;
-  }
-  case InstructionType::subi:
-    out() = a - b;
-    return;
-  case InstructionType::muli:
-    out() = a * b;
-    return;
-  case InstructionType::divi:
-    out() = a / b;
-    return;
-  default:
-    throw std::logic_error("non-tertiary operator incorrectly handled");
-  }
-}
 } // namespace
 tri::Interpreter::Interpreter(Executable &&e)
     : text(std::move(e.text)), stack(std::move(e.data)) {
@@ -130,6 +25,109 @@ tri::Interpreter::Interpreter(Executable &&e)
 }
 
 void tri::Interpreter::execute() {
+  // these are organized here bc I try to minimize stuff in headers
+  // and it has to be in function bc of visibility rules
+  // this is not ideal
+  auto handleUnary = [this](tri::Instruction i) {
+    auto wide = i.op.unary;
+    auto eval = [&](auto o) -> Word {
+      if (o.lit.type == tri::Type::lit) {
+        return Val(o.lit);
+      } else {
+        return reg(o.reg);
+      }
+    };
+    switch (i.instruct) {
+    case InstructionType::out: {
+      out(reg(wide.reg).val);
+      return;
+    }
+    case InstructionType::in: {
+      reg(wide.reg).val.is_alloc = false;
+      reg(wide.reg).val = in();
+      return;
+    }
+    case InstructionType::call:
+      rp().val = ip().val;
+      [[fallthrough]];
+    case InstructionType::jmp: {
+      ip().val = eval(wide);
+      return;
+    }
+    default: {
+      throw std::logic_error("non-unary operator incorrectly handled");
+    }
+    }
+  };
+
+  auto handleBinary = [this](tri::Instruction i) {
+    auto eval = [&](auto o) -> Word {
+      if (o.lit.type == tri::Type::lit) {
+        return Val(o.lit);
+      } else {
+        return reg(o.reg);
+      }
+    };
+    auto a = eval(i.op.binary.a), b = eval(i.op.binary.b);
+    switch (i.instruct) {
+    case InstructionType::jnz:
+      if (a != tri::nullw) {
+        ip().val = b;
+      }
+      return;
+    case InstructionType::jez:
+      if (a == tri::nullw) {
+        ip().val = b;
+      }
+      return;
+    case InstructionType::alloc:
+      heap.push_back(tri::Interpreter::Allocation(static_cast<Val>(a)));
+      reg(i.op.binary.b.reg).alloc = tri::Alloc(heap.size() - 1, 0);
+      return;
+    case InstructionType::mov:
+      reg(i.op.binary.b.reg) = a;
+      return;
+    case InstructionType::load:
+      reg(i.op.binary.b.reg) = deref(a);
+      return;
+    case InstructionType::store:
+      deref(reg(i.op.binary.b.reg)) = a;
+      return;
+    default:
+      throw std::logic_error("non-tertiary operator incorrectly handled");
+    }
+  };
+
+  auto handleTertiary = [this](tri::Instruction i) {
+    auto eval = [&](tri::Operand o) -> Word {
+      if (o.lit.type == tri::Type::lit) {
+        return Val(o.lit);
+      } else {
+        return reg(o.reg);
+      }
+    };
+    auto a = eval(i.op.ternary.a), b = eval(i.op.ternary.b);
+    auto out = [&]() -> Word & { return reg(i.op.ternary.out); };
+    switch (i.instruct) {
+    case InstructionType::addi: {
+      auto n = a + b;
+      out() = n;
+      return;
+    }
+    case InstructionType::subi:
+      out() = a - b;
+      return;
+    case InstructionType::muli:
+      out() = a * b;
+      return;
+    case InstructionType::divi:
+      out() = a / b;
+      return;
+    default:
+      throw std::logic_error("non-tertiary operator incorrectly handled");
+    }
+  };
+
   auto operand = [this](Operand o) -> tri::Word {
     auto type = o.lit.type;
     switch (type) {
@@ -148,13 +146,13 @@ void tri::Interpreter::execute() {
         return;
       break;
     case opCount::one:
-      handleUnary(*this, instruction);
+      handleUnary(instruction);
       break;
     case opCount::two:
-      handleBinary(*this, instruction);
+      handleBinary(instruction);
       break;
     case opCount::three:
-      handleTertiary(*this, instruction);
+      handleTertiary(instruction);
       break;
     default:
       throw std::logic_error("this really shouldn't happen");

@@ -55,6 +55,7 @@ struct RegisterOperand {
   Register operand : 7;
   operator Register() const noexcept { return operand; }
 };
+
 struct Literal {
   Type type : 1 = Type::lit;
   uchar rotate : 3;
@@ -76,6 +77,7 @@ private:
       throw std::logic_error("have not implemented figuring out rotations yet");
   }
 };
+
 struct [[gnu::packed]] WideLiteral {
   Type type : 1 = Type::lit;
   uint16_t value : 15;
@@ -96,6 +98,7 @@ private:
   }
 };
 static_assert(sizeof(WideLiteral) == 3, "WideLiteral is not packed");
+
 struct [[gnu::packed]] SemiLiteral {
   Type type : 1 = Type::lit;
   uint16_t value : 15;
@@ -112,16 +115,17 @@ private:
       throw std::logic_error("literal is out of bounds");
   }
 };
+
 union Operand {
   Literal lit;
   RegisterOperand reg;
 };
 
-union WideOperand {
-  WideLiteral lit;
+union SemiwideOperand {
+  SemiLiteral lit;
   RegisterOperand reg;
-  WideOperand() : lit() {}
-  constexpr WideOperand(Operand o) {
+  SemiwideOperand() : lit(0) {}
+  constexpr SemiwideOperand(Operand o) {
     if (o.lit.type == Type::lit) {
       lit = o.lit;
     } else {
@@ -130,11 +134,11 @@ union WideOperand {
   }
 };
 
-union SemiwideOperand {
-  SemiLiteral lit;
+union WideOperand {
+  WideLiteral lit;
   RegisterOperand reg;
-  SemiwideOperand() : lit(0) {}
-  constexpr SemiwideOperand(Operand o) {
+  WideOperand() : lit() {}
+  constexpr WideOperand(Operand o) {
     if (o.lit.type == Type::lit) {
       lit = o.lit;
     } else {
@@ -161,7 +165,7 @@ union Op {
 
 enum struct opCount : unsigned char { zero, one, two, three };
 
-inline opCount operandCount(InstructionType i) {
+inline opCount operandCount(InstructionType i) noexcept {
   using enum opCount;
   switch (i) {
   case InstructionType::subi:
@@ -186,6 +190,7 @@ inline opCount operandCount(InstructionType i) {
     return zero;
   }
 }
+
 inline opCount count(unsigned i) {
   using enum opCount;
   if (i == 0)
@@ -237,6 +242,7 @@ struct Val {
   }
   operator uint32_t() const { return data; }
 };
+
 inline bool operator==(Val l, Val r) {
   return l.is_alloc == r.is_alloc && l.data == r.data;
 }
@@ -248,8 +254,7 @@ struct Alloc {
   uint16_t offset : 15;
   bool is_alloc : 1 = true;
 };
-struct Nullword_t {};
-constexpr inline static Nullword_t nullw;
+
 union Word {
   Alloc alloc;
   Val val;
@@ -284,6 +289,8 @@ union Word {
   }
 };
 
+struct Nullword_t {};
+constexpr inline static Nullword_t nullw;
 inline bool operator==(Word w, Nullword_t n) {
   if (w.alloc.is_alloc) {
     return false;
@@ -296,6 +303,7 @@ inline bool operator!=(Word w, Nullword_t n) { return !(w == n); }
 inline bool operator==(Word l, Word r) {
   return l.alloc.is_alloc == r.alloc.is_alloc && l.val == r.val;
 }
+
 template <typename Op> Word WordOps(Op op, Word left, Word right) {
   if (left.alloc.is_alloc != right.val.is_alloc) {
     if (left.alloc.is_alloc)
@@ -311,6 +319,7 @@ template <typename Op> Word WordOps(Op op, Word left, Word right) {
 inline auto operator+(Word l, Word r) {
   return WordOps([](auto l, auto r) { return int(l) + r; }, l, r);
 }
+
 inline auto operator-(Word left, Word right) {
   if (left.alloc.is_alloc != right.val.is_alloc) {
     if (left.alloc.is_alloc)
@@ -322,12 +331,14 @@ inline auto operator-(Word left, Word right) {
   }
   return Word(Val(left.alloc.offset - right.alloc.offset));
 }
+
 template <typename Op> Word WordValOps(Op op, Word left, Word right) {
   if (!left.val.is_alloc && !right.val.is_alloc) {
     return Word(Val(op(left.val, right.val)));
   }
   throw std::runtime_error("illegal operation with alloc operand");
 }
+
 inline auto operator*(Word l, Word r) {
   return WordValOps([](auto l, auto r) { return int(l) + r; }, l, r);
 }
@@ -342,7 +353,7 @@ struct Executable {
 
 Executable assemble(const char *data, const char *assembly);
 
-struct Interpreter final {
+class Interpreter final {
   struct Allocation {
     uint32_t begin() const noexcept { return 0; }
     uint32_t end() const noexcept { return data.size(); }
@@ -384,8 +395,8 @@ public:
 
   Interpreter(Executable &&);
   void execute();
-  size_t mem_consumption() const;
-  void enable_debug() { debug = true; }
+  void enable_debug() noexcept { debug = true; }
+  void clean();
 };
 } // namespace tri
 
