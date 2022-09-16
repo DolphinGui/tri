@@ -1,4 +1,5 @@
 #include "fmt/format.h"
+#include <unordered_map>
 #define TRI_ENABLE_FMT_FORMATTING
 #include "tri/asm.hpp"
 #undef TRI_ENABLE_FMT_FORMATTING
@@ -8,6 +9,7 @@
 #include <cstdint>
 #include <exception>
 #include <iostream>
+#include <span>
 #include <stdexcept>
 #include <string_view>
 #include <thread>
@@ -81,8 +83,7 @@ void tri::Interpreter::execute() {
       }
       return;
     case InstructionType::alloc:
-      heap.push_back(tri::Interpreter::Allocation(static_cast<Val>(a)));
-      reg(i.op.binary.b.reg).alloc = tri::Alloc(heap.size() - 1, 0);
+      reg(i.op.binary.b.reg).alloc = alloc(a.val);
       return;
     case InstructionType::mov:
       reg(i.op.binary.b.reg) = a;
@@ -168,17 +169,10 @@ void tri::Interpreter::execute() {
 }
 
 Word tri::Interpreter::alloc(uint32_t size) {
-  uint32_t begin = 0;
-  if (!heap.empty()) {
-    begin = heap.back().end();
-  }
-  if (begin > 1 << 31) {
-    throw std::runtime_error("out of memory");
-  }
-  auto alloc = Allocation{begin};
-  alloc.data.resize(size);
-  heap.push_back(std::move(alloc));
-  return Word(begin);
+  heap.insert({alloc_count, Allocation(size)});
+  auto num = alloc_count;
+  ++alloc_count;
+  return Alloc(num, 0);
 }
 
 Word &tri::Interpreter::deref(Word ptr) {
@@ -197,10 +191,38 @@ Word &tri::Interpreter::deref(Word ptr) {
       std::exit(1);
     }
   } else {
-    if (heap.size() > ptr.alloc.number &&
-        heap[ptr.alloc.number].inRange(ptr.alloc)) {
-      return heap[ptr.alloc.number].data[ptr.alloc.offset];
-    }
+    auto n = heap.find(ptr.alloc.number);
+    if (n != heap.end())
+      return n->second.data[ptr.alloc.offset];
   }
   throw std::runtime_error("invalid derefence");
+}
+void tri::Interpreter::clean() {
+  auto mark = [this](Alloc a, auto &&self) {
+    auto &alloc = heap.at(a.number);
+    if (alloc.mark == curr_mark)
+      return;
+    alloc.mark = curr_mark;
+    for (auto w : alloc.data) {
+      if (w.alloc.is_alloc) {
+        self(w.alloc, self);
+      }
+    }
+  };
+  // scans stack
+  for (auto w : std::span(stack.begin(), sp().val + 1)) {
+    if (w.alloc.is_alloc) {
+      mark(w.alloc, mark);
+    }
+  }
+  // sweeps
+  std::erase_if(heap, [](auto &&n) { return !n.second.mark; });
+  curr_mark = !curr_mark;
+}
+size_t tri::Interpreter::mem_consumption() const noexcept {
+  size_t sum = 0;
+  for (auto &[_, alloc] : heap) {
+    sum += alloc.data.size();
+  }
+  return sum;
 }

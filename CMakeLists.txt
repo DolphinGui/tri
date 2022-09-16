@@ -24,7 +24,7 @@ target_compile_features(triasm PUBLIC cxx_std_20)
 target_link_libraries(triasm PRIVATE re2::re2 fmt)
 
 add_executable(asm-test ${CMAKE_SOURCE_DIR}/tests/asm-test.cpp)
-target_link_libraries(asm-test PRIVATE triasm)
+target_link_libraries(asm-test PRIVATE triasm fmt)
 
 add_executable(btree ${CMAKE_SOURCE_DIR}/tests/btree.cpp)
-target_link_libraries(btree PRIVATE triasm)
+target_link_libraries(btree PRIVATE triasm fmt)

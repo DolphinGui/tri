@@ -1,3 +1,4 @@
+#include "fmt/format.h"
 #include "tri/asm.hpp"
 #include <algorithm>
 #include <iostream>
@@ -44,6 +45,8 @@ int main() {
               "alloc 3 r0\n"
               "call @createchildren\n"
               "call @printtree\n"
+              "hlt\n"
+              "mov 0 r0\n"
               "hlt\n"
               "@printtree\n" // r0 = rootptr
               "addi sp 1 sp\n"
@@ -114,4 +117,8 @@ int main() {
   };
   // run.enable_debug();
   run.execute();
+  fmt::print("words: {}\n", run.mem_consumption());
+  run.execute();
+  run.clean();
+  fmt::print("words: {}\n", run.mem_consumption());
 }

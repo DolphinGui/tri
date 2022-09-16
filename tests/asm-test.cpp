@@ -1,3 +1,4 @@
+#include "fmt/format.h"
 #include "tri/asm.hpp"
 #include <iostream>
 #include <sstream>
@@ -37,4 +38,5 @@ int main() {
     }
   };
   run.execute();
+  fmt::print("words: {}\n", run.mem_consumption());
 }

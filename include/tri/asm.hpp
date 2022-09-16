@@ -360,14 +360,17 @@ class Interpreter final {
     bool inRange(Alloc ptr) const noexcept { return ptr.offset < end(); }
     Word &deref(uint32_t ptr) { return data.at(ptr); }
     std::vector<Word> data;
+    bool mark;
     Allocation(uint32_t size) { data.resize(size); }
   };
 
   std::vector<Word> stack;
-  std::vector<Allocation> heap;
+  std::unordered_map<uint32_t, Allocation> heap;
+  uint32_t alloc_count = 0;
   std::vector<Instruction> text;
   std::array<Word, 16> registers{};
   bool debug = false;
+  bool curr_mark = true;
 
   auto &ip() { return registers[0]; }
   auto &bp() { return registers[1]; }
@@ -397,6 +400,7 @@ public:
   void execute();
   void enable_debug() noexcept { debug = true; }
   void clean();
+  size_t mem_consumption() const noexcept;
 };
 } // namespace tri
 
