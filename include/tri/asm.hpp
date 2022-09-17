@@ -361,12 +361,13 @@ class Interpreter final {
     Word &deref(uint32_t ptr) { return data.at(ptr); }
     std::vector<Word> data;
     bool mark;
-    Allocation(uint32_t size) { data.resize(size); }
+    Allocation(uint32_t size, bool mark) : mark(mark) { data.resize(size); }
   };
 
   std::vector<Word> stack;
   std::unordered_map<uint32_t, Allocation> heap;
-  uint32_t alloc_count = 0;
+  std::vector<uint64_t> allocced = {0};
+  std::vector<uint64_t> marks;
   std::vector<Instruction> text;
   std::array<Word, 16> registers{};
   bool debug = false;

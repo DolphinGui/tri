@@ -8,9 +8,9 @@
 #include <vector>
 /*
 this is the btree that will be formed
-   l  l
-   \ /
-    e  o
+   l  l  !  \n
+   \ /   \ /
+    e    o
     \/
     h
 sequence:
@@ -19,8 +19,8 @@ sequence:
     true, l, false, false,
     true, l, false, false,
   true, o,
-    false,
-    false
+    true, !, false, false,
+    true, \n, false, false
 
 node structure
 left: 1
@@ -46,7 +46,8 @@ int main() {
               "call @createchildren\n"
               "call @printtree\n"
               "hlt\n"
-              "mov 0 r0\n"
+              "store 0 r0\n"
+              "call @printtree\n"
               "hlt\n"
               "@printtree\n" // r0 = rootptr
               "addi sp 1 sp\n"
@@ -69,6 +70,7 @@ int main() {
               "load r0 r0\n"
               "call @printtree\n"
               "@rightprint\n"
+              "load sp r0\n" // restore r0 = root
               "subi sp 1 sp\n"
               "load sp rp\n"
               "subi sp 1 sp\n"
@@ -104,9 +106,9 @@ int main() {
               "subi sp 1 sp\n"
               "jmp rp\n";
   auto run = tri::Interpreter(tri::assemble(data, text));
-  std::vector<int> sequence = {'h',   true,  'e',  true,  'l',   false,
-                               false, true,  'l',  false, false, true,
-                               'o',   false, true, '\n',  false, false};
+  std::vector<int> sequence = {'h',  true,  'e',   true,  'l',  false, false,
+                               true, 'l',   false, false, true, 'o',   true,
+                               '!',  false, false, true,  '\n', false, false};
   std::ranges::reverse(sequence);
   run.in = [&]() {
     if (sequence.empty())

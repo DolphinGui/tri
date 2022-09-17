@@ -1,5 +1,5 @@
 #include "fmt/format.h"
-#include <unordered_map>
+#include <limits>
 #define TRI_ENABLE_FMT_FORMATTING
 #include "tri/asm.hpp"
 #undef TRI_ENABLE_FMT_FORMATTING
@@ -19,10 +19,12 @@ namespace {
 std::string log(Instruction i) {
   return std::string(tri::instruction_names.at(i.instruct));
 }
+uint64_t change_bit(uint64_t val, unsigned num) { return (val & ~(1 << num)); }
 } // namespace
 tri::Interpreter::Interpreter(Executable &&e)
     : text(std::move(e.text)), stack(std::move(e.data)) {
-  sp() = stack.size() - 1;
+  if (!stack.empty())
+    sp() = stack.size() - 1;
   bp() = sp();
 }
 
@@ -169,10 +171,23 @@ void tri::Interpreter::execute() {
 }
 
 Word tri::Interpreter::alloc(uint32_t size) {
-  heap.insert({alloc_count, Allocation(size)});
-  auto num = alloc_count;
-  ++alloc_count;
-  return Alloc(num, 0);
+  uint32_t pos = 0;
+  for (auto &i : allocced) {
+    if (i != 0xFFFFFFFF) {
+      for (unsigned bit = 0; bit != 64; ++bit) {
+        if ((i & (1 << bit)) == 0) {
+          i |= 1 << bit;
+          pos += bit;
+          break;
+        }
+      }
+      break;
+    }
+    pos += 64;
+  }
+
+  heap.insert({pos, Allocation(size, !curr_mark)});
+  return Alloc(pos, 0);
 }
 
 Word &tri::Interpreter::deref(Word ptr) {
@@ -197,6 +212,7 @@ Word &tri::Interpreter::deref(Word ptr) {
   }
   throw std::runtime_error("invalid derefence");
 }
+
 void tri::Interpreter::clean() {
   auto mark = [this](Alloc a, auto &&self) {
     auto &alloc = heap.at(a.number);
@@ -210,13 +226,27 @@ void tri::Interpreter::clean() {
     }
   };
   // scans stack
-  for (auto w : std::span(stack.begin(), sp().val + 1)) {
+  if (!stack.empty())
+    for (auto w : std::span(stack.begin(), sp().val + 1)) {
+      if (w.alloc.is_alloc) {
+        mark(w.alloc, mark);
+      }
+    }
+  // scans registers
+  for (auto w : registers) {
     if (w.alloc.is_alloc) {
       mark(w.alloc, mark);
     }
   }
   // sweeps
-  std::erase_if(heap, [](auto &&n) { return !n.second.mark; });
+  for (auto i = heap.begin(), last = heap.end(); i != last;) {
+    if (i->second.mark != curr_mark) {
+      allocced[i->first / 64] &= ~(1 << (i->first % 64));
+      i = heap.erase(i);
+    } else {
+      ++i;
+    }
+  }
   curr_mark = !curr_mark;
 }
 size_t tri::Interpreter::mem_consumption() const noexcept {
