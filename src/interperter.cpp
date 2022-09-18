@@ -1,3 +1,4 @@
+#include "fmt/core.h"
 #include "fmt/format.h"
 #include <limits>
 #define TRI_ENABLE_FMT_FORMATTING
@@ -5,6 +6,7 @@
 #undef TRI_ENABLE_FMT_FORMATTING
 
 #include <bit>
+#include <bitset>
 #include <chrono>
 #include <cstdint>
 #include <exception>
@@ -173,10 +175,10 @@ void tri::Interpreter::execute() {
 Word tri::Interpreter::alloc(uint32_t size) {
   uint32_t pos = 0;
   for (auto &i : allocced) {
-    if (i != 0xFFFFFFFF) {
+    if (!i.all()) {
       for (unsigned bit = 0; bit != 64; ++bit) {
-        if ((i & (1 << bit)) == 0) {
-          i |= 1 << bit;
+        if (!i.test(bit)) {
+          i.set(bit);
           pos += bit;
           break;
         }
@@ -221,15 +223,13 @@ void tri::Interpreter::clean() {
     seen.resize(allocced.size(), 0);
   }
   auto wasSeen = [&](uint16_t index) -> bool {
-    return seen[index / 64] & ~(1 << (index % 64));
+    return seen[index / 64].test(index % 64);
   };
-  auto hasSeen = [&](uint16_t index) {
-    seen[index / 64] |= 1 << (index % 64);
-  };
-  auto mark = [&](Alloc a, auto &&self) {
-    auto &alloc = heap.at(a.number);
+  auto hasSeen = [&](uint16_t index) { seen[index / 64].set(index % 64); };
+  auto markAlloc = [&](Alloc a, auto &&self) {
     if (wasSeen(a.number))
       return;
+    auto &alloc = heap.at(a.number);
     hasSeen(a.number);
     for (auto w : alloc.data) {
       if (w.alloc.is_alloc) {
@@ -241,19 +241,19 @@ void tri::Interpreter::clean() {
   if (!stack.empty())
     for (auto w : std::span(stack.begin(), sp().val + 1)) {
       if (w.alloc.is_alloc) {
-        mark(w.alloc, mark);
+        markAlloc(w.alloc, markAlloc);
       }
     }
   // scans registers
   for (auto w : registers) {
     if (w.alloc.is_alloc) {
-      mark(w.alloc, mark);
+      markAlloc(w.alloc, markAlloc);
     }
   }
   // sweeps
   for (auto i = heap.begin(), last = heap.end(); i != last;) {
-    if (wasSeen(i->first)) {
-      allocced[i->first / 64] &= ~(1 << (i->first % 64));
+    if (!wasSeen(i->first)) {
+      allocced[i->first / 64].reset(i->first % 64);
       i = heap.erase(i);
     } else {
       ++i;
