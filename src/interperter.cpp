@@ -216,16 +216,16 @@ Word &tri::Interpreter::deref(Word ptr) {
 }
 
 void tri::Interpreter::clean() {
-  if (seen.size() > allocced.size()) {
+  if (marks.size() > allocced.size()) {
     throw std::logic_error("marks is greater than allocced for some reason.");
   }
-  if (seen.size() < allocced.size()) {
-    seen.resize(allocced.size(), 0);
+  if (marks.size() < allocced.size()) {
+    marks.resize(allocced.size(), 0);
   }
   auto wasSeen = [&](uint16_t index) -> bool {
-    return seen[index / 64].test(index % 64);
+    return marks[index / 64].test(index % 64);
   };
-  auto hasSeen = [&](uint16_t index) { seen[index / 64].set(index % 64); };
+  auto hasSeen = [&](uint16_t index) { marks[index / 64].set(index % 64); };
   auto markAlloc = [&](Alloc a, auto &&self) {
     if (wasSeen(a.number))
       return;
@@ -259,8 +259,8 @@ void tri::Interpreter::clean() {
       ++i;
     }
   }
-  seen.clear();
-  seen.resize(allocced.size(), 0);
+  marks.clear();
+  marks.resize(allocced.size(), 0);
 }
 size_t tri::Interpreter::mem_consumption() const noexcept {
   size_t sum = 0;

@@ -31,3 +31,6 @@ target_link_libraries(btree PRIVATE triasm fmt)
 
 add_executable(realloc ${CMAKE_SOURCE_DIR}/tests/realloc.cpp)
 target_link_libraries(realloc PRIVATE triasm fmt)
+
+add_executable(graph ${CMAKE_SOURCE_DIR}/tests/graph.cpp)
+target_link_libraries(graph PRIVATE triasm fmt)

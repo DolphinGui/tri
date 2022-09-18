@@ -368,8 +368,7 @@ class Interpreter final {
   std::vector<Word> stack;
   std::unordered_map<uint32_t, Allocation> heap;
   std::vector<std::bitset<64>> allocced = {0};
-  std::vector<std::bitset<64>> seen = {0};
-  // std::vector<uint64_t> safe = {0};
+  std::vector<std::bitset<64>> marks = {0};
   std::vector<Instruction> text;
   std::array<Word, 16> registers{};
   bool debug = false;
