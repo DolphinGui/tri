@@ -186,7 +186,7 @@ Word tri::Interpreter::alloc(uint32_t size) {
     pos += 64;
   }
 
-  heap.insert({pos, Allocation(size, !curr_mark)});
+  heap.insert({pos, Allocation(size, false)});
   return Alloc(pos, 0);
 }
 
@@ -214,11 +214,23 @@ Word &tri::Interpreter::deref(Word ptr) {
 }
 
 void tri::Interpreter::clean() {
-  auto mark = [this](Alloc a, auto &&self) {
+  if (seen.size() > allocced.size()) {
+    throw std::logic_error("marks is greater than allocced for some reason.");
+  }
+  if (seen.size() < allocced.size()) {
+    seen.resize(allocced.size(), 0);
+  }
+  auto wasSeen = [&](uint16_t index) -> bool {
+    return seen[index / 64] & ~(1 << (index % 64));
+  };
+  auto hasSeen = [&](uint16_t index) {
+    seen[index / 64] |= 1 << (index % 64);
+  };
+  auto mark = [&](Alloc a, auto &&self) {
     auto &alloc = heap.at(a.number);
-    if (alloc.mark == curr_mark)
+    if (wasSeen(a.number))
       return;
-    alloc.mark = curr_mark;
+    hasSeen(a.number);
     for (auto w : alloc.data) {
       if (w.alloc.is_alloc) {
         self(w.alloc, self);
@@ -240,14 +252,15 @@ void tri::Interpreter::clean() {
   }
   // sweeps
   for (auto i = heap.begin(), last = heap.end(); i != last;) {
-    if (i->second.mark != curr_mark) {
+    if (wasSeen(i->first)) {
       allocced[i->first / 64] &= ~(1 << (i->first % 64));
       i = heap.erase(i);
     } else {
       ++i;
     }
   }
-  curr_mark = !curr_mark;
+  seen.clear();
+  seen.resize(allocced.size(), 0);
 }
 size_t tri::Interpreter::mem_consumption() const noexcept {
   size_t sum = 0;

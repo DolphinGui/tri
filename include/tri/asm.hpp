@@ -367,11 +367,10 @@ class Interpreter final {
   std::vector<Word> stack;
   std::unordered_map<uint32_t, Allocation> heap;
   std::vector<uint64_t> allocced = {0};
-  std::vector<uint64_t> marks;
+  std::vector<uint64_t> seen = {0};
   std::vector<Instruction> text;
   std::array<Word, 16> registers{};
   bool debug = false;
-  bool curr_mark = true;
 
   auto &ip() { return registers[0]; }
   auto &bp() { return registers[1]; }
